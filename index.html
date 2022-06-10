@@ -1,0 +1,332 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-1BmE4kWBq78iYhFldvKuhfTAU6auU8tT94WrHftjDbrCEXSU1oBoqyl2QvZ6jIW3" crossorigin="anonymous">
+		<script src="https://unpkg.com/vue@3"></script>
+    <title>My tasks</title>
+	<link rel="icon" type="image/svg+xml"
+		href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@5.15.4/svgs/regular/flushed.svg">	
+	<style>
+		
+		ul {
+			list-style-type: none;
+			padding-left: 0;
+		}
+		li {
+			padding: 5px;
+			display: flex;
+			justify-content: stretch;
+			align-items: flex-start;
+			margin-bottom: 10px;
+			cursor: pointer;
+			border-radius: 4px;
+			color: rgba( 255,255,255,.8);
+		}
+		ul.locked li{ 
+			color: rgba( 255,255,255,.5);
+		}
+		ul:not(.locked) li:hover{
+			background-color: #161616;
+		}
+		li input[type="checkbox"] {
+			margin-right: 10px;
+			margin-top: 6px;
+		}
+		.text-strike {
+			text-decoration: line-through;
+		}
+		summary {
+			list-style: none;
+		}
+		summary.text-moved {
+			color: #ab7575;
+		}
+		details {
+			font-size: .8rem;
+		}
+		details summary {
+			font-size: 1rem;
+		}
+		details[open] {
+			border-left: 1px solid #ccc;
+			padding-left: 5px;
+		}
+		.card {
+			background-color: #000;
+		}
+		.row-container {
+			overflow-x: scroll;
+			box-shadow: inset 50px 0px 20px -55px #000, inset -50px 0px 20px -60px #000;
+			padding: 40px;
+			flex-wrap: unset;
+		}
+		::-webkit-scrollbar {
+			-webkit-appearance: none;
+			width: 8px;
+			height: 8px;
+		}
+
+		::-webkit-scrollbar-thumb {
+			border-radius: 3px;
+			background-color: rgba(0, 0, 0, .9);
+			box-shadow: 0 0 1px rgba(255, 255, 255, .8);
+		}
+		.text-highlighted {
+			color: #ffff00;
+			background-color: #252525;
+			border-radius: 4px;
+			padding: 4px;
+		}
+		input[type="text"].form-control{
+			background-color: #cbcaca;
+		}
+	</style>
+  </head>
+  <body class="bg-dark">
+	<nav class="navbar navbar-expand-lg navbar-dark bg-dark shadow">
+		<div class="container-fluid justify-content-center">
+			<a class="navbar-brand" href="#">Daily Tasks</a>
+		</div>
+	</nav>
+	<div class="container mt-5" id="app">
+		<div class="row row-container">
+			<div class="col-3" v-for="(tasks, day) in view" :id="todayText(day)" :ref="todayText(day)">
+				<div :class="['card border-0', {'shadow':day == today}, {'shadow-sm':day != today}]" :id="day">
+					<h5 :class="[ { 'text-danger':day == today }, { 'text-secondary': day != today }, 'card-title p-2 border-bottom text-center' ]">{{day}}</h5>
+					<div class="card-body p-2">
+						<ul :class="{ 'locked text-secondary':(day != today) }">
+							<li v-for="task of tasks" :key="task.id">
+								<input type="checkbox" :data-id="task.id" @change="updateTask(task.id, $event)" v-if="task.taskDate == today && task.complete" checked>
+								<input type="checkbox" :data-id="task.id" @change="updateTask(task.id, $event)" v-else-if="task.taskDate == today">
+								<details :class="{ 'done text-muted':task.complete }" v-on:click="highlight(task.id)">
+									<summary :class="[{'text-moved': (task.id != highlighted && task.dateAdded != task.taskDate)}, {'text-highlighted': task.id == highlighted}, {'text-strike':task.complete} ]">
+										<svg v-if="task.locked" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="#aaa">
+											<path d="M18 10v-4c0-3.313-2.687-6-6-6s-6 2.687-6 6v4h-3v14h18v-14h-3zm-5 7.723v2.277h-2v-2.277c-.595-.347-1-.984-1-1.723 0-1.104.896-2 2-2s2 .896 2 2c0 .738-.404 1.376-1 1.723zm-5-7.723v-4c0-2.206 1.794-4 4-4 2.205 0 4 1.794 4 4v4h-8z" />
+										</svg>
+										{{task.val}}
+									</summary>
+									<span class="text-secondary"><strong>Added:</strong> {{task.dateAdded}}</span>
+									<span class="text-secondary" v-if="task.complete"><br /><strong>Completed:</strong> {{task.dateCompleted}}</span>
+								</details>
+							</li>
+						</ul>
+						<div v-if="day == today">
+							<input type="text" v-model="newTask" v-on:keyup.enter="addTask()" class="form-control" placeholder="Add a task">
+						</div>
+					</div>
+				</div>
+			</div>
+		</div>
+	</div>
+  </body>
+
+	<script>
+		Vue.createApp({
+			data() {
+				return {
+					today: new Date().toJSON().split('T').splice(0,1).join(''),
+					view: {},
+					lockDB: false,
+					newTask: '',
+					scrolled: false,
+					highlighted: ''
+				}
+			},
+			methods: {
+				loadDb(){
+					try {
+						let db = this.getdb();
+						this.view[this.today] = [];
+						if( !db.hasOwnProperty('data') ){
+							throw( 'No data found');
+						}
+
+						data = db.data;
+						//update dates of incomplete tasks to today
+						for( task of data ){
+							if( !task.complete && task.taskDate != this.today && !task.locked ) {
+								tempTask = Object.assign({},task);
+								tempTask.taskDate = this.today;
+								this.pushTaskToDb(tempTask);
+							} 
+						}
+
+						//lock all previous days tasks
+						this.lockallTasksInDb();
+
+						//create a default view for db, show only tasks with 5 previous dates
+						dates = 0;
+						currentDate = '';
+						
+							for( task of data ){
+								if( dates > this.dateEnd ) break;
+								if( currentDate != task.taskDate ){
+									dates++;
+									currentDate = task.taskDate;
+								}
+								
+								if (!this.view.hasOwnProperty(currentDate)) {
+									this.view[currentDate] = [];
+								}
+								this.view[currentDate].push(task);
+							
+							}
+							
+							//sort the view
+							this.view = Object.keys(this.view).sort().reduce( ( obj, key ) => {
+								obj[key] = this.view[key];
+								return obj;
+							},{});
+
+					} catch( error ){
+						console.log( error )
+					}
+				},
+				addTask(){
+					
+					//add task to view
+					let task = this.createTask(this.newTask)
+					this.view[this.today].push( task );
+					this.newTask = '';
+					
+					// add task to db in localstorage and update it with the timestamp
+					this.pushTaskToDb( task );
+				},
+				createTask(task){
+					return {
+						id: this.timestamp(),
+						val: task,
+						dateAdded: this.today,
+						taskDate: this.today,
+						dateCompleted: '',
+						complete: false,
+						locked: false
+					}
+				},
+				pushTaskToDb(task){
+					let db = this.getdb();
+					if (!db.hasOwnProperty('data')) {
+						db.data = [];
+					}
+					
+					//check if exists
+					let exists = false;
+					for( tt of db.data ){
+						if( tt.id == task.id && tt.taskDate == task.taskDate ) exists = true;
+					}
+					if( !exists ){
+						db.data.push( task );
+						db.timestamp = this.timestamp();
+
+						//write db back
+						this.putdb(db);
+					}
+				},
+				timestamp(){
+					return new Date().toJSON().replace(/T|Z|\.|\-|\:/g, '')
+				},
+				updateTask(value, event ){
+					
+					let db = this.getdb();
+					if( event.target.checked ){
+						
+						//update task in view
+						for( task of this.view[this.today] ){
+							if( task.id == value ){
+								task.complete = true;
+								task.dateCompleted = this.today;
+
+							}
+						}
+
+						//update task om localStorage
+						for( task of db.data ){
+							if( task.id == value && task.taskDate == this.today){
+								task.complete = true;
+								task.dateCompleted = this.today;
+							}
+						}
+					}
+					else {
+						//update task in view
+						for (task of this.view[this.today]) {
+							if (task.id == value) {
+								task.complete = false;
+								task.dateCompleted = '';
+							}
+						}
+
+						//update task om localStorage
+						for (task of db.data) {
+							if (task.id == value && task.taskDate == this.today) {
+								task.complete = false;
+								task.dateCompleted = '';
+							}
+						}
+					}
+					db.timestamp = this.timestamp();
+
+					//write db back
+					this.putdb( db );
+
+				},
+				lockallTasksInDb(){
+					let db = this.getdb();
+					//update task om localStorage
+					for (task of db.data) {
+						if (task.taskDate != this.today && !task.locked ) {
+							task.locked = true;
+						}
+					}
+					db.timestamp = this.timestamp();
+					//write db back
+					this.putdb(db);
+				},
+				getdb(){
+					if( localStorage.getItem('db') == null ){
+						localStorage.setItem('db', '{}');
+					}
+					return JSON.parse(localStorage.getItem("db"));
+					
+				},
+				putdb( db ){
+					localStorage.setItem("db", JSON.stringify(db));
+				},
+				todayText(day){
+					return ( day == this.today ) ? "today" : "";
+				},
+				scrollToElement() {
+					this.$refs.today[0].scrollIntoView({behaviour:'smooth'})
+				},
+				highlight( id ){
+					if( this.highlighted == id  ){
+						this.highlighted = '';
+					} else {
+						this.highlighted = id;
+					}
+				}
+			},
+			mounted() {
+
+				//update db to bring incomplete tasks to today
+				this.loadDb();
+
+				/* horizontal scroll as found on https://alvarotrigo.com/blog/scroll-horizontally-with-mouse-wheel-vanilla-java/*/
+				scrollContainer = document.querySelector('.row-container');
+				scrollContainer.addEventListener("wheel", (evt) => {
+					evt.preventDefault();
+					scrollContainer.scrollLeft += evt.deltaY;
+				});
+			},
+			updated(){
+				if( !this.scrolled ){
+					this.scrollToElement()
+					this.scrolled = true;
+				}
+			}
+		}).mount('#app');
+	</script>
+
+</html>
