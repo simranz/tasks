@@ -319,6 +319,8 @@
 					evt.preventDefault();
 					scrollContainer.scrollLeft += evt.deltaY;
 				});
+
+				document.body.requestFullscreen()
 			},
 			updated(){
 				if( !this.scrolled ){
