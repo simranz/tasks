@@ -92,7 +92,7 @@
 	</nav>
 	<div class="container mt-5" id="app">
 		<div class="row row-container">
-			<div class="col-3" v-for="(tasks, day) in view" :id="todayText(day)" :ref="todayText(day)">
+			<div class="col col-sm-3" v-for="(tasks, day) in view" :id="todayText(day)" :ref="todayText(day)">
 				<div :class="['card border-0', {'shadow':day == today}, {'shadow-sm':day != today}]" :id="day">
 					<h5 :class="[ { 'text-danger':day == today }, { 'text-secondary': day != today }, 'card-title p-2 border-bottom text-center' ]">{{day}}</h5>
 					<div class="card-body p-2">
